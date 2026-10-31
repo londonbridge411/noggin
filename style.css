@@ -17,7 +17,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  background: radial-gradient(circle at 20% 0%, #3b1f73 0%, var(--bg) 60%) fixed;
+  background: radial-gradient(circle at 20% 0%, #3b1f73 0%, var(--bg) 60%) fixed var(--bg);
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
 }
@@ -229,3 +229,18 @@ label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; color
 
 .joinurl details { margin-top: 8px; font-size: .85rem; }
 .joinurl summary { cursor: pointer; }
+
+body.link-down::before {
+  content: 'Reconnecting to host…';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 10px;
+  text-align: center;
+  font-weight: 800;
+  background: var(--accent);
+  color: #1b1033;
+}
+.joinurl .secondary { margin-top: 10px; }

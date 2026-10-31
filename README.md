@@ -1,14 +1,17 @@
 # Noggin
 
-A multiplayer guess-what's-on-your-forehead party game. Everyone plays on their own phone in a browser.
+A multiplayer guess-what's-on-your-forehead party game. Everyone plays on their own phone in a browser. It's fully static and runs on GitHub Pages.
 
-## Running it
+**Play:** https://londonbridge411.github.io/noggin/
 
-1. Double-click `start.bat`, or run `node server.js` (Node 18+; no `npm install` needed).
-2. The first time, Windows Firewall asks about Node.js. Allow it on **private networks** or phones won't be able to connect.
-3. Create a room on the PC. The lobby shows the link (e.g. `http://192.168.0.3:3000/?room=ABCD`) for phones on the same Wi-Fi.
+## How it works
 
-To use a different port, run `set PORT=4000 && node server.js`.
+Whoever taps **Create a new room** is the host. The game runs in the host's browser tab, and other players connect straight to it peer-to-peer over WebRTC. [PeerJS](https://peerjs.com/) and its free public server only introduce the phones to each other. There is no game server, so:
+
+- The host needs to keep the tab open and the screen on. Use a PC or tablet as host if you can.
+- Players can join from anywhere with internet, not just the same Wi-Fi.
+- If the host refreshes, the room comes back, because it's saved in their browser. Guests reconnect on their own.
+- Some strict networks (certain cellular carriers, corporate Wi-Fi) can block peer-to-peer connections. Switching that phone to Wi-Fi usually fixes it.
 
 ## Modes
 
@@ -29,10 +32,22 @@ Strahd | https://example.com/strahd.jpg   <- an image with its answer shown unde
 # lines starting with # are ignored
 ```
 
-Image URLs load straight from their source on each phone, so every phone needs internet access for picture cards. Hosts that block hotlinking won't display; the card then shows the URL.
+Images load straight from their URL on each phone. Sites that block hotlinking won't display; the card then shows the URL.
+
+## Running locally
+
+It's plain static files, so any static server works:
+
+```
+python -m http.server 8000
+```
+
+Then open http://localhost:8000. You still need internet access for PeerJS.
 
 ## Files
 
-- `server.js`: game server (rooms, turns, scoring). State lives in memory, so restarting ends all rooms.
-- `decks.js`: built-in decks. Add your own here as `{ text }` or `{ text, img }` cards.
-- `public/`: the phone UI.
+- `index.html`, `style.css`: page and styling.
+- `app.js`: screens, plus the host/guest networking.
+- `game.js`: game rules (rooms, turns, scoring). Runs on the host only.
+- `decks.js`: built-in decks. Add your own as `{ text }` or `{ text, img }` cards.
+- `vendor/peerjs.min.js`: PeerJS 1.5.5.
