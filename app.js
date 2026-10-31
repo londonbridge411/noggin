@@ -1,17 +1,18 @@
-// Noggin client. Whoever creates a room hosts it: the game runs in their tab
-// (game.js) and other players connect to it peer-to-peer through PeerJS.
-// Everyone, host included, just renders the per-player view they're handed.
+// Noggin client. The game runs on the server (api/room.js, lib/game.js); every
+// phone, host included, sends actions there and renders the per-player view it
+// gets back. The host is just the player who picks settings and starts games.
 
 const app = document.getElementById('app');
 const toastEl = document.getElementById('toast');
 
-const PEER_PREFIX = 'noggin-party-v1-';
-const SESSION_KEY = 'noggin-session'; // { code, id, host }
-const ROOM_KEY = 'noggin-host-room'; // the host's saved game, so a refresh doesn't end it
+const SESSION_KEY = 'noggin-session'; // { code, id, key }
 
 let session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+if (session && !session.key) session = null; // left over from the old peer-to-peer version
 let state = null;
-let net = null; // { act(action) -> Promise<error|null>, close() }
+let version = null; // room version of the view we're showing
+let onlineSig = null; // who the server last said was online
+let pollTimer = null;
 let linkDown = false;
 const info = {
   decks: Object.entries(window.DECKS).map(([key, d]) => ({ key, name: d.name, kind: d.kind, count: d.cards.length })),
@@ -21,6 +22,7 @@ let screenKey = null;
 let pendingSettings = {};
 let settingsTimer = null;
 let lastBeepSecond = null;
+let lastExpiryNudge = 0;
 
 const MODES = {
   hotseat: {
@@ -87,10 +89,51 @@ const buzz = (ms) => navigator.vibrate?.(ms);
 
 // ---------- networking ----------
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function call(op, body) {
+  let res;
+  try {
+    res = await fetch('/api/room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op, ...body }),
+    });
+  } catch {
+    throw new Error('Couldn\'t reach the server. Check your internet connection.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong on the server. Try again.');
+  return data;
+}
+
+const creds = () => ({ code: session.code, id: session.id, key: session.key });
+
+// Applies a server reply. Polls and actions can cross in flight, so never let an
+// older version of the room replace a newer one.
+function handle(data) {
+  if (data.gone) {
+    const wasPlaying = !!state;
+    leave(false);
+    toast(wasPlaying ? 'The room has ended, or you were removed.' : 'That room has ended.');
+    return;
+  }
+  setLinkDown(false);
+  if (data.view && (version == null || data.v >= version)) {
+    version = data.v;
+    onlineSig = data.sig;
+    receive(data.view);
+  }
+}
 
 function act(action) {
-  return net ? net.act(action).then((err) => (err ? toast(err) : null)) : Promise.resolve();
+  if (!session) return Promise.resolve();
+  const s = session;
+  return call('act', { ...creds(), action })
+    .then((data) => {
+      if (s !== session) return;
+      handle(data);
+      if (data.error) toast(data.error);
+    })
+    .catch((err) => toast(err.message));
 }
 
 function receive(view) {
@@ -99,9 +142,44 @@ function receive(view) {
   render();
 }
 
-function saveSession() {
+// Phones check in about once a second; the server answers "same" unless the room
+// or who's online changed. Hidden tabs stop polling (and show as offline).
+let pollInFlight = false;
+async function poll() {
+  clearTimeout(pollTimer);
+  if (!session || document.hidden || pollInFlight) return;
+  const s = session;
+  pollInFlight = true;
+  try {
+    const data = await call('poll', { ...creds(), v: version, sig: onlineSig });
+    if (s === session) handle(data);
+  } catch {
+    if (s === session) setLinkDown(true);
+  } finally {
+    pollInFlight = false;
+  }
+  if (session) pollTimer = setTimeout(poll, state?.phase === 'turn' ? 1000 : 1500);
+}
+document.addEventListener('visibilitychange', () => !document.hidden && poll());
+
+function startSession(data) {
+  session = { code: data.code, id: data.id, key: data.key };
+  version = null;
+  onlineSig = null;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   history.replaceState(null, '', `?room=${session.code}`);
+  handle(data);
+  pollTimer = setTimeout(poll, 1000);
+}
+
+async function createRoom(name) {
+  startSession(await call('create', { name }));
+}
+
+async function joinRoom(code, name) {
+  const data = await call('join', { code, name });
+  if (data.error) throw new Error(data.error);
+  startSession(data);
 }
 
 function setLinkDown(down) {
@@ -109,200 +187,17 @@ function setLinkDown(down) {
   document.body.classList.toggle('link-down', down);
 }
 
-// Opens a Peer under a fixed ID. 'unavailable-id' means someone holds it: another
-// room with that code, or our own previous tab that the server hasn't dropped yet.
-function openPeer(id) {
-  return new Promise((resolve, reject) => {
-    const peer = new Peer(id, { debug: 0 });
-    peer.once('open', () => resolve(peer));
-    peer.once('error', (err) => {
-      peer.destroy();
-      reject(err);
-    });
-  });
-}
-
-async function hostRoom(name, saved) {
-  let peer;
-  let code = saved?.code;
-  if (code) {
-    // Reclaiming our room after a refresh; the old connection can take a moment to clear.
-    for (let tries = 0; !peer; tries++) {
-      try {
-        peer = await openPeer(PEER_PREFIX + code);
-      } catch (err) {
-        if (err.type !== 'unavailable-id' || tries > 20) throw err;
-        await wait(3000);
-      }
-    }
-  } else {
-    for (let tries = 0; !peer; tries++) {
-      code = Noggin.newCode();
-      try {
-        peer = await openPeer(PEER_PREFIX + code);
-      } catch (err) {
-        if (err.type !== 'unavailable-id' || tries > 5) throw err;
-      }
-    }
-  }
-
-  const conns = new Map(); // playerId -> DataConnection
-  let me;
-  const room = new Noggin.Room(code, () => {
-    localStorage.setItem(ROOM_KEY, JSON.stringify(room));
-    for (const [pid, conn] of conns) {
-      if (!room.find(pid)) {
-        // Removed by the host.
-        conn.send({ t: 'gone' });
-        setTimeout(() => conn.close(), 500);
-        conns.delete(pid);
-      } else if (conn.open) conn.send({ t: 'state', view: room.viewFor(pid) });
-    }
-    if (me) receive(room.viewFor(me));
-  }, saved?.room);
-
-  peer.on('connection', (conn) => {
-    conn.on('data', (msg) => {
-      if (msg?.t === 'join') {
-        let p = msg.id && room.find(msg.id);
-        if (!p && msg.id) return conn.send({ t: 'gone' });
-        if (!p && room.players.length >= 30) return conn.send({ t: 'error', error: 'Room is full.' });
-        if (!p) p = room.addPlayer(msg.name);
-        const old = conns.get(p.id);
-        if (old && old !== conn) old.close();
-        conns.set(p.id, conn);
-        conn.pid = p.id;
-        conn.send({ t: 'joined', id: p.id, code });
-        room.setOnline(p.id, true);
-        conn.send({ t: 'state', view: room.viewFor(p.id) });
-      } else if (msg?.t === 'act' && conn.pid) {
-        conn.send({ t: 'ack', n: msg.n, error: room.act(conn.pid, msg.action) });
-      }
-    });
-    conn.on('close', () => {
-      if (conn.pid && conns.get(conn.pid) === conn) {
-        conns.delete(conn.pid);
-        room.setOnline(conn.pid, false);
-      }
-    });
-  });
-  // Lost the signalling server (not the players): reconnect so new people can still join.
-  peer.on('disconnected', () => setTimeout(() => !peer.destroyed && peer.reconnect(), 2000));
-  peer.on('error', (err) => console.warn('peer error', err.type));
-
-  if (saved?.id && room.find(saved.id)) me = saved.id;
-  else me = room.addPlayer(name).id;
-  room.setOnline(me, true);
-
-  net = {
-    act: async (action) => room.act(me, action),
-    close: () => {
-      for (const conn of conns.values()) if (conn.open) conn.send({ t: 'gone' });
-      setTimeout(() => peer.destroy(), 300);
-    },
-  };
-  session = { code, id: me, host: true };
-  saveSession();
-  receive(room.viewFor(me));
-}
-
-function joinRoom(code, name, id) {
-  return new Promise((resolve, reject) => {
-    const peer = new Peer({ debug: 0 });
-    const pending = new Map();
-    let n = 0;
-    let conn = null;
-    let joined = false;
-    let closed = false;
-
-    const fail = (msg) => {
-      if (joined) return;
-      closed = true;
-      peer.destroy();
-      reject(new Error(msg));
-    };
-    const giveUp = setTimeout(() => fail('Couldn\'t reach that room. Check the code, and make sure the host still has Noggin open.'), 20000);
-    const retry = (ms) => setTimeout(() => {
-      if (closed) return;
-      if (peer.disconnected) peer.reconnect();
-      else connect();
-    }, ms);
-
-    function connect() {
-      if (closed) return;
-      const c = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
-      conn = c;
-      c.on('open', () => c.send({ t: 'join', name, id }));
-      c.on('data', (msg) => {
-        if (msg.t === 'joined') {
-          id = msg.id;
-          setLinkDown(false);
-          if (!joined) {
-            joined = true;
-            clearTimeout(giveUp);
-            session = { code, id, host: false };
-            saveSession();
-            resolve();
-          }
-        } else if (msg.t === 'state') receive(msg.view);
-        else if (msg.t === 'ack') {
-          pending.get(msg.n)?.(msg.error);
-          pending.delete(msg.n);
-        } else if (msg.t === 'error') fail(msg.error);
-        else if (msg.t === 'gone') {
-          closed = true;
-          peer.destroy();
-          if (joined) {
-            leave();
-            toast('The room has ended, or you were removed.');
-          } else reject(new Error('That room has ended.'));
-        }
-      });
-      c.on('close', () => {
-        if (closed || c !== conn) return;
-        setLinkDown(true);
-        retry(2000);
-      });
-    }
-
-    peer.on('open', connect);
-    peer.on('error', (err) => {
-      // peer-unavailable: the host isn't there. Before joining that's a bad code;
-      // after, the host is probably refreshing, so keep trying.
-      if (err.type === 'peer-unavailable') {
-        if (joined) {
-          setLinkDown(true);
-          retry(3000);
-        } else fail('No room with that code. Check it and try again.');
-      } else if (!joined && ['browser-incompatible', 'ssl-unavailable', 'server-error', 'socket-error', 'network'].includes(err.type)) {
-        fail('Couldn\'t connect. Check your internet connection.');
-      }
-    });
-    peer.on('disconnected', () => !closed && retry(2000));
-
-    net = {
-      act: (action) => {
-        if (!conn?.open) return Promise.resolve('Not connected to the host right now.');
-        const k = ++n;
-        conn.send({ t: 'act', n: k, action });
-        return new Promise((res) => pending.set(k, res));
-      },
-      close: () => {
-        closed = true;
-        peer.destroy();
-      },
-    };
-  });
-}
-
-function leave() {
-  net?.close();
-  net = null;
+// notify: tell the server we left, so we drop off the player list (and the host
+// role passes to someone else). False when the server already told us we're gone.
+function leave(notify = true) {
+  if (notify && session) call('act', { ...creds(), action: { type: 'leave' } }).catch(() => {});
+  clearTimeout(pollTimer);
   session = null;
   state = null;
+  version = null;
+  onlineSig = null;
   setLinkDown(false);
   localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(ROOM_KEY);
   history.replaceState(null, '', location.pathname);
   screenKey = null;
   render();
@@ -336,7 +231,7 @@ function topbar(extra) {
         : null,
       h('button', {
         class: 'tiny-link',
-        onclick: () => confirm(session.host ? 'You\'re the host: leaving ends the room for everyone. Leave?' : 'Leave this room?') && leave(),
+        onclick: () => confirm(isHost() && state.players.length > 1 ? 'You\'re the host. Leaving hands that to the next player. Leave?' : 'Leave this room?') && leave(),
       }, 'Leave')));
 }
 
@@ -388,13 +283,7 @@ function renderHome() {
       if (code.value.trim().length < 4) throw new Error('Enter the 4-letter room code.');
       await joinRoom(code.value.trim().toUpperCase(), name.value.trim());
     });
-    const create = busy(async () => {
-      try {
-        await hostRoom(name.value.trim());
-      } catch {
-        throw new Error('Couldn\'t create a room. Check your internet connection.');
-      }
-    });
+    const create = busy(() => createRoom(name.value.trim()));
     joinBtn.addEventListener('click', join);
     code.addEventListener('keydown', (e) => e.key === 'Enter' && join());
 
@@ -465,7 +354,7 @@ function renderLobby() {
     ? h('div', { class: 'stack' },
       h('button', { class: 'good huge wide', disabled: !canStart, onclick: () => { beep(660); act({ type: 'start' }); } }, 'Start game'),
       canStart ? null : h('p', { class: 'center muted' }, 'Waiting for at least one more player…'),
-      h('p', { class: 'center muted' }, 'You\'re hosting: the game runs on this device, so keep this tab open and the screen on.'))
+      h('p', { class: 'center muted' }, 'You\'re the host: you pick the settings and start the game.'))
     : h('p', { class: 'center muted' }, `Waiting for ${nameOf(state.hostId)} to start…`));
 }
 
@@ -599,6 +488,11 @@ function renderTurn() {
 
 function tick() {
   if (state?.phase !== 'turn') return;
+  // The server only notices time is up when someone asks, so nudge it.
+  if (now() > state.endsAt + 300 && Date.now() - lastExpiryNudge > 2000) {
+    lastExpiryNudge = Date.now();
+    act({ type: 'tick' });
+  }
   const left = Math.max(0, state.endsAt - now());
   const secs = Math.ceil(left / 1000);
   const timer = document.getElementById('timer');
@@ -749,21 +643,14 @@ async function stayAwake() {
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && stayAwake());
 document.addEventListener('click', stayAwake, { once: true });
 
-(async function boot() {
+(function boot() {
   const urlRoom = new URLSearchParams(location.search).get('room')?.toUpperCase();
-  if (session && urlRoom && urlRoom !== session.code) session = null; // following a link to a different room
-  render();
-  if (!session) return;
-  try {
-    if (session.host) {
-      const room = JSON.parse(localStorage.getItem(ROOM_KEY) || 'null');
-      if (!room) throw new Error('That room has ended.');
-      await hostRoom(null, { code: session.code, id: session.id, room });
-    } else {
-      await joinRoom(session.code, null, session.id);
-    }
-  } catch (err) {
-    leave();
-    toast(err.message || 'Couldn\'t get back into that room.');
+  if (session && urlRoom && urlRoom !== session.code) {
+    // Following a link to a different room: leave the old one.
+    call('act', { ...creds(), action: { type: 'leave' } }).catch(() => {});
+    session = null;
+    localStorage.removeItem(SESSION_KEY);
   }
+  render();
+  poll();
 })();

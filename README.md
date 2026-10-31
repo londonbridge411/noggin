@@ -1,17 +1,19 @@
 # Noggin
 
-A multiplayer guess-what's-on-your-forehead party game. Everyone plays on their own phone in a browser. It's fully static and runs on GitHub Pages.
+A multiplayer guess-what's-on-your-forehead party game. Everyone plays on their own phone in a browser. It's hosted on Vercel.
 
-**Play:** https://londonbridge411.github.io/noggin/
+**Play:** https://noggin-omega.vercel.app/
 
 ## How it works
 
-Whoever taps **Create a new room** is the host. The game runs in the host's browser tab, and other players connect straight to it peer-to-peer over WebRTC. [PeerJS](https://peerjs.com/) and its free public server only introduce the phones to each other. There is no game server, so:
+Whoever taps **Create a new room** is the host: they pick the settings and start games. The game itself runs on the server, so:
 
-- The host needs to keep the tab open and the screen on. Use a PC or tablet as host if you can.
+- Nobody has to keep a tab open. If the host leaves, the next player becomes host.
+- Anyone can refresh or lock their phone and pick up where they left off.
 - Players can join from anywhere with internet, not just the same Wi-Fi.
-- If the host refreshes, the room comes back, because it's saved in their browser. Guests reconnect on their own.
-- Some strict networks (certain cellular carriers, corporate Wi-Fi) can block peer-to-peer connections. Switching that phone to Wi-Fi usually fixes it.
+- Rooms are deleted after 6 hours without activity, or when everyone leaves.
+
+Phones check in with the server about once a second, so other players see a change within about a second.
 
 ## Modes
 
@@ -34,20 +36,19 @@ Strahd | https://example.com/strahd.jpg   <- an image with its answer shown unde
 
 Images load straight from their URL on each phone. Sites that block hotlinking won't display; the card then shows the URL.
 
-## Running locally
+## Deploying
 
-It's plain static files, so any static server works:
+Vercel serves the static files and runs `api/room.js` as a function. Rooms are stored in Upstash Redis:
 
-```
-python -m http.server 8000
-```
+1. In the Vercel project, open **Storage**, add **Upstash Redis** (the free plan is fine), and connect it to the project. Vercel adds its URL and token as environment variables.
+2. Redeploy.
 
-Then open http://localhost:8000. You still need internet access for PeerJS.
+The function reads `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or the `KV_REST_API_URL` and `KV_REST_API_TOKEN` names some Vercel integrations use. A night of play with eight phones uses roughly 50,000 Redis commands, which fits within Upstash's free monthly allowance a few times over.
 
 ## Files
 
 - `index.html`, `style.css`: page and styling.
-- `app.js`: screens, plus the host/guest networking.
-- `game.js`: game rules (rooms, turns, scoring). Runs on the host only.
-- `decks.js`: built-in decks. Add your own as `{ text }` or `{ text, img }` cards.
-- `vendor/peerjs.min.js`: PeerJS 1.5.5.
+- `app.js`: screens, plus talking to the server.
+- `api/room.js`: the server endpoint. Creates and joins rooms, applies actions, answers polls.
+- `lib/game.js`: game rules (rooms, turns, scoring). Runs on the server only.
+- `decks.js`: built-in decks, used by both the server and the lobby screen. Add your own as `{ text }` or `{ text, img }` cards.

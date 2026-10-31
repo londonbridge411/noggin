@@ -231,7 +231,7 @@ label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; color
 .joinurl summary { cursor: pointer; }
 
 body.link-down::before {
-  content: 'Reconnecting to host…';
+  content: 'Reconnecting…';
   position: fixed;
   top: 0;
   left: 0;

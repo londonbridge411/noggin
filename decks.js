@@ -1,4 +1,4 @@
-// Built-in decks, exposed as window.DECKS. A card is { text, img }: text is the answer, img is an optional image URL.
+// Built-in decks, exposed as globalThis.DECKS (window.DECKS in the browser). A card is { text, img }: text is the answer, img is an optional image URL.
 // Name decks are plain word lists; picture decks pair an answer with an image URL.
 
 (function () {
@@ -305,5 +305,5 @@ const DECKS = {
   },
 };
 
-window.DECKS = DECKS;
+globalThis.DECKS = DECKS;
 })();
