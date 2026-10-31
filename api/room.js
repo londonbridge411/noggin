@@ -12,8 +12,14 @@
 
 import { Room, newCode } from '../lib/game.js';
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+// Vercel's Upstash integration names these KV_REST_API_URL / KV_REST_API_TOKEN, or
+// UPSTASH_REDIS_REST_URL / _TOKEN, sometimes with a custom prefix (STORAGE_KV_...).
+const envEnding = (...suffixes) => {
+  const name = Object.keys(process.env).find((k) => suffixes.some((s) => k.endsWith(s)));
+  return name && process.env[name];
+};
+const REDIS_URL = envEnding('KV_REST_API_URL', 'REDIS_REST_URL');
+const REDIS_TOKEN = envEnding('KV_REST_API_TOKEN', 'REDIS_REST_TOKEN');
 
 const TTL = 6 * 60 * 60; // idle rooms disappear after 6 hours
 const ONLINE_WINDOW = 8000; // ms since a player's last poll before they show as offline
@@ -143,7 +149,12 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
   if (!REDIS_URL || !REDIS_TOKEN) {
-    return res.status(500).json({ error: 'The server has no database yet. Connect Upstash Redis to this project in Vercel.' });
+    // Variable names only (never values), to help spot a naming mismatch.
+    const seen = Object.keys(process.env).filter((k) => /KV|REDIS|UPSTASH/.test(k));
+    return res.status(500).json({
+      error: 'The server has no database yet. Connect Upstash Redis to this project in Vercel, then redeploy.',
+      found: seen,
+    });
   }
   const body = (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body) || {};
   const op = ops[body.op];
