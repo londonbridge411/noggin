@@ -65,7 +65,8 @@ const DECKS = {
       'James Charles', 'MoistCr1TiKaL', 'MrBeast', 'Johnny Sins', 'Yes King',
       'PewDiePie', 'Logan Paul', 'Jake Paul', 'KSI', 'IShowSpeed', 'Kai Cenat', 'xQc',
       'Markiplier', 'Jeffree Star', 'Shane Dawson', 'Andrew Tate', 'Salt Bae',
-      'Hide the Pain Harold', 'Rick Astley', 'Keemstar',
+      'Hide the Pain Harold', 'Rick Astley', 'Keemstar', 'Bonnie Blue', 'Tom Brady',
+      'Michael Myers', 'Mia Khalifa',
     ]),
   },
   characters: {
