@@ -249,6 +249,68 @@ function roundLabel() {
   return `Round ${state.round} of ${state.settings.rounds}`;
 }
 
+// ---------- deck preview ----------
+
+// A full-screen overlay outside #app, so lobby re-renders don't close it.
+let previewEl = null;
+
+function closePreview() {
+  previewEl?.remove();
+  previewEl = null;
+  document.body.classList.remove('previewing');
+}
+
+function openPreview(deckKey) {
+  if (!previewEl) {
+    previewEl = h('div', { class: 'preview', role: 'dialog', 'aria-modal': 'true' });
+    document.body.append(previewEl);
+    document.body.classList.add('previewing');
+  }
+  const deck = deckKey && window.DECKS[deckKey];
+  const header = (title, back) => h('div', { class: 'preview-head' },
+    back ? h('button', { class: 'secondary small', onclick: () => openPreview() }, '← Decks') : null,
+    h('h2', { class: 'grow' }, title),
+    h('button', { class: 'secondary small', onclick: closePreview }, '✕ Close'));
+
+  if (!deck) {
+    const group = (kind, title) => [
+      h('h3', {}, title),
+      h('div', { class: 'decks' }, info.decks.filter((d) => d.kind === kind).map((d) =>
+        h('button', { class: 'deck', onclick: () => openPreview(d.key) }, d.name, h('small', {}, `${d.count} cards`)))),
+    ];
+    previewEl.replaceChildren(h('div', { class: 'preview-body' },
+      header('Preview decks'),
+      h('p', { class: 'muted' }, 'Spoiler warning: these are the cards you\'ll be guessing.'),
+      group('pictures', 'Picture decks'),
+      group('names', 'Name decks')));
+  } else {
+    let failed = 0;
+    const note = h('p', { class: 'muted' }, `${deck.cards.length} cards`);
+    const tiles = deck.cards.map((card) => {
+      const kids = [];
+      if (card.img) {
+        const img = h('img', { src: card.img, alt: card.text || '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+        img.onerror = () => {
+          img.replaceWith(h('div', { class: 'imgfail' }, 'Image didn\'t load'));
+          note.textContent = `${deck.cards.length} cards · ${++failed} image${failed > 1 ? 's' : ''} didn't load`;
+        };
+        kids.push(img);
+      }
+      kids.push(h('div', { class: 'name' }, card.text || '(no name)'));
+      return h('div', { class: `ptile ${card.img ? '' : 'text-only'}` }, kids);
+    });
+    previewEl.replaceChildren(h('div', { class: 'preview-body' },
+      header(deck.name, true), note,
+      h('div', { class: 'pgrid' }, tiles)));
+  }
+  previewEl.scrollTo(0, 0);
+}
+
+document.addEventListener('keydown', (e) => e.key === 'Escape' && previewEl && closePreview());
+
+const previewButton = () =>
+  h('button', { class: 'secondary small', onclick: () => openPreview() }, '👁 Preview decks');
+
 // ---------- home ----------
 
 function renderHome() {
@@ -301,6 +363,7 @@ function renderHome() {
           h('p', { class: 'center muted' }, '— or —'),
           h('button', { class: 'blue wide', onclick: create }, 'Create a new room'),
         ]),
+      h('div', { class: 'center' }, previewButton()),
     ];
   });
 }
@@ -405,6 +468,7 @@ function settingsForm() {
         h('button', { class: `mode ${s.mode === key ? 'on' : ''}`, onclick: () => changeSettings({ mode: key }) },
           h('b', {}, m.name), h('small', {}, m.blurb))))),
     h('div', { class: 'panel' },
+      h('div', {}, previewButton()),
       deckGroup('names', 'Name decks'),
       deckGroup('pictures', 'Picture decks'),
       h('h3', {}, 'Custom cards'),
@@ -424,6 +488,7 @@ function settingsSummary() {
     h('h3', {}, 'Game'),
     h('p', {}, h('b', {}, MODES[s.mode].name), ' — ', MODES[s.mode].blurb),
     h('p', { class: 'muted' }, 'Decks: ', decks.join(', ') || 'none yet'),
+    h('div', {}, previewButton()),
     h('p', { class: 'muted' }, s.mode === 'hotseat'
       ? `${s.seconds}s turns · ${s.rounds} turn${s.rounds > 1 ? 's' : ''} each`
       : `${s.rounds} round${s.rounds > 1 ? 's' : ''}`));
@@ -450,7 +515,7 @@ function renderReady() {
   ]);
 }
 
-function answerButtons(huge) {
+function answerButtons() {
   const send = (type) => {
     if (type === 'correct') { beep(988, 150); buzz(40); } else { beep(220, 180, 'square'); buzz([20, 40, 20]); }
     app.classList.remove('flash-good', 'flash-bad');
@@ -459,8 +524,8 @@ function answerButtons(huge) {
     act({ type, seq: state.seq });
   };
   return h('div', { class: 'answer-buttons' },
-    h('button', { class: `bad ${huge ? '' : 'huge'}`, onclick: () => send('pass') }, '✗ Pass'),
-    h('button', { class: `good ${huge ? '' : 'huge'}`, onclick: () => send('correct') }, '✓ Got it'));
+    h('button', { class: 'bad', onclick: () => send('pass') }, '✗ Pass'),
+    h('button', { class: 'good', onclick: () => send('correct') }, '✓ Got it'));
 }
 
 function renderTurn() {
@@ -473,11 +538,11 @@ function renderTurn() {
     mine
       ? h('div', { class: 'guesser-view' },
         h('div', { class: 'card mystery' }, h('div', { class: 'word' }, '🙈'), h('p', {}, 'No peeking — the others can see it')),
-        answerButtons(true))
+        answerButtons())
       : [
         h('p', { class: 'center muted' }, `Get ${nameOf(state.guesserId)} to say:`),
         cardView(state.card),
-        answerButtons(false),
+        h('p', { class: 'center muted' }, `${nameOf(state.guesserId)} taps Got it or Pass on their phone.`),
       ],
     mine || isHost()
       ? h('button', { class: 'tiny-link', onclick: () => act({ type: 'endTurn' }) }, 'End turn early')

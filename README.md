@@ -17,7 +17,7 @@ Phones check in with the server about once a second, so other players see a chan
 
 ## Modes
 
-**Hot Seat.** Players take turns as the guesser. The guesser's phone hides the card; everyone else sees it and gives clues. Anyone can tap **Got it** or **Pass**. Every correct card scores 1 point for the guesser.
+**Hot Seat.** Players take turns as the guesser. The guesser's phone hides the card; everyone else sees it and gives clues. The guesser taps **Got it** or **Pass** on their own phone. Every correct card scores 1 point for the guesser.
 
 **Mystery Guest.** Everyone gets a secret card and can see everyone's card but their own. Take turns asking yes/no questions. When someone says their answer, another player taps **They got it** on that player's card. Solving first scores the most points (number of players, then one fewer, and so on, minimum 1).
 
@@ -33,6 +33,8 @@ https://example.com/owlbear.png           <- an image (clue-givers see only the 
 Strahd | https://example.com/strahd.jpg   <- an image with its answer shown underneath
 # lines starting with # are ignored
 ```
+
+Tap **Preview decks** (on the home screen or in the lobby) to browse every card in a deck, pictures included. A picture that fails to load is flagged there, which makes broken links easy to spot.
 
 Images load straight from their URL on each phone. Sites that block hotlinking won't display; the card then shows the URL.
 
