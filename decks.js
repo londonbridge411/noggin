@@ -59,7 +59,7 @@ const DECKS = {
       'Adolf Hitler', 'Benito Mussolini', 'King Leopold II', 'Osama bin Laden', 'Joseph Stalin',
       'Mao Zedong', 'Pol Pot', 'Saddam Hussein', 'Kim Jong Un', 'Vladimir Putin', 'Idi Amin',
       'Genghis Khan', 'Vlad the Impaler', 'Henry VIII', 'Marie Antoinette', 'Al Capone',
-      'Pablo Escobar', 'El Chapo', 'Jack the Ripper', 'Charles Manson',
+      'Pablo Escobar', 'El Chapo', 'Charles Manson',
       'Donald Trump', 'Barack Obama', 'George W. Bush', 'Joe Biden', 'Bill Clinton',
       'Richard Nixon', 'Ronald Reagan', 'John F. Kennedy', 'Winston Churchill', 'Fidel Castro',
       'James Charles', 'MoistCr1TiKaL', 'MrBeast', 'Johnny Sins', 'Yes King',
