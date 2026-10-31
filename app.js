@@ -100,9 +100,36 @@ async function call(op, body) {
   } catch {
     throw new Error('Couldn\'t reach the server. Check your internet connection.');
   }
+  noteBuild(res.headers.get('X-Noggin-Build'));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Something went wrong on the server. Try again.');
   return data;
+}
+
+// ---------- new deploys ----------
+
+// Every deploy stamps its id into index.html and the server (scripts/stamp.js).
+// When the server is on a newer build than this page, reload at the next calm
+// moment (never mid-turn). The session is in localStorage, so we land back in the room.
+const BUILD = document.querySelector('meta[name="build"]')?.content || 'dev';
+let newBuild = null;
+
+function noteBuild(serverBuild) {
+  if (!serverBuild || serverBuild === 'dev' || BUILD === 'dev' || serverBuild === BUILD) return;
+  newBuild = serverBuild; // acted on in handle(), once the reply's view is applied
+}
+
+function maybeReload() {
+  if (!newBuild) return;
+  if (state && !['lobby', 'final'].includes(state.phase)) return;
+  // Don't yank the host's settings form out from under them while they type.
+  if (document.getElementById('settings')?.contains(document.activeElement) || Object.keys(pendingSettings).length) return;
+  // Only try once per build, in case a stale cache keeps serving the old page.
+  try {
+    if (sessionStorage.getItem('noggin-reloaded-for') === newBuild) return;
+    sessionStorage.setItem('noggin-reloaded-for', newBuild);
+  } catch {}
+  location.reload();
 }
 
 const creds = () => ({ code: session.code, id: session.id, key: session.key });
@@ -122,6 +149,7 @@ function handle(data) {
     onlineSig = data.sig;
     receive(data.view);
   }
+  maybeReload(); // a new deploy waiting for a calm moment
 }
 
 function act(action) {

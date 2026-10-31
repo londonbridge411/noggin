@@ -45,6 +45,8 @@ Vercel serves the static files and runs `api/room.js` as a function. Rooms are s
 1. In the Vercel project, open **Storage**, add **Upstash Redis** (the free plan is fine), and connect it to the project. Vercel adds its URL and token as environment variables.
 2. Redeploy.
 
+Each deploy runs `npm run build` (`scripts/stamp.js`). It stamps the commit ID onto `app.js`, `decks.js` and `style.css` in `index.html` so phones can't keep old cached copies, and gives the server the same ID. A phone still running an older version reloads itself on the home screen, in the lobby, or at final scores, never mid-game. Locally the ID is just `dev`.
+
 The function reads `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or the `KV_REST_API_URL` and `KV_REST_API_TOKEN` names some Vercel integrations use. A night of play with eight phones uses roughly 50,000 Redis commands, which fits within Upstash's free monthly allowance a few times over.
 
 ## Files

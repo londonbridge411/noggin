@@ -11,6 +11,7 @@
 //   noggin:CODE:seen  hash of playerId -> last poll time, for the online/offline badges
 
 import { Room, newCode } from '../lib/game.js';
+import { BUILD } from '../lib/build.js';
 
 // Vercel's Upstash integration names these KV_REST_API_URL / KV_REST_API_TOKEN, or
 // UPSTASH_REDIS_REST_URL / _TOKEN, sometimes with a custom prefix (STORAGE_KV_...).
@@ -147,6 +148,7 @@ const ops = {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Noggin-Build', BUILD); // phones on an older build reload (see app.js)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
   if (!REDIS_URL || !REDIS_TOKEN) {
     // Variable names only (never values), to help spot a naming mismatch.

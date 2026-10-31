@@ -1,5 +1,8 @@
 {
   "name": "noggin",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/stamp.js"
+  }
 }
