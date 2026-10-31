@@ -52,6 +52,22 @@ const DECKS = {
       'Julius Caesar', 'Keanu Reeves', 'Martin Luther King Jr.',
     ]),
   },
+  infamous: {
+    name: 'Infamous & Internet Famous',
+    kind: 'names',
+    cards: names([
+      'Adolf Hitler', 'Benito Mussolini', 'King Leopold II', 'Osama bin Laden', 'Joseph Stalin',
+      'Mao Zedong', 'Pol Pot', 'Saddam Hussein', 'Kim Jong Un', 'Vladimir Putin', 'Idi Amin',
+      'Genghis Khan', 'Vlad the Impaler', 'Henry VIII', 'Marie Antoinette', 'Al Capone',
+      'Pablo Escobar', 'El Chapo', 'Jack the Ripper', 'Charles Manson',
+      'Donald Trump', 'Barack Obama', 'George W. Bush', 'Joe Biden', 'Bill Clinton',
+      'Richard Nixon', 'Ronald Reagan', 'John F. Kennedy', 'Winston Churchill', 'Fidel Castro',
+      'James Charles', 'MoistCr1TiKaL', 'MrBeast', 'Johnny Sins', 'Yes King',
+      'PewDiePie', 'Logan Paul', 'Jake Paul', 'KSI', 'IShowSpeed', 'Kai Cenat', 'xQc',
+      'Markiplier', 'Jeffree Star', 'Shane Dawson', 'Andrew Tate', 'Salt Bae',
+      'Hide the Pain Harold', 'Rick Astley', 'Keemstar',
+    ]),
+  },
   characters: {
     name: 'Characters',
     kind: 'names',
