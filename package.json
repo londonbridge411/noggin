@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/stamp.js"
+    "build": "node scripts/stamp.js",
+    "dev": "node scripts/dev.js"
   }
 }

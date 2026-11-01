@@ -49,6 +49,12 @@ Each deploy runs `npm run build` (`scripts/stamp.js`). It stamps the commit ID o
 
 The function reads `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or the `KV_REST_API_URL` and `KV_REST_API_TOKEN` names some Vercel integrations use. A night of play with eight phones uses roughly 50,000 Redis commands, which fits within Upstash's free monthly allowance a few times over.
 
+## Running it on your computer
+
+Run `npm run dev` and open http://localhost:3000. Phones on the same Wi-Fi can join using the network address it prints. It uses the Redis keys in `.env.local` (`npx vercel env pull .env.local` fetches them). Press Ctrl+C to stop it.
+
+Opening `index.html` directly, or with a plain static server, shows the page but has no game server behind it, so rooms won't work.
+
 ## Files
 
 - `index.html`, `style.css`: page and styling.
