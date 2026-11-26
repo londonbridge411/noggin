@@ -1,7 +1,8 @@
 // Local server: `npm run dev`. Serves the page and runs api/room.js the way Vercel
-// does, so you can play without deploying. Reads the Redis keys from .env.local
-// (get them with `npx vercel env pull .env.local`). Phones on the same Wi-Fi can
-// join using the network address it prints.
+// does, so you can play without deploying. Phones on the same Wi-Fi can join using
+// the network address it prints. With Redis keys in .env.local (get them with
+// `npx vercel env pull .env.local`) it uses that database; without them it keeps
+// rooms in memory, which needs no setup but forgets them when it stops.
 
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
@@ -19,9 +20,11 @@ if (existsSync(envFile)) {
     const m = line.match(/^\s*([\w.]+)\s*=\s*(.*?)\s*$/);
     if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
   }
-} else {
-  console.warn('No .env.local found, so the game server has no database. Run: npx vercel env pull .env.local');
 }
+// Same names api/room.js looks for.
+const hasRedis = ['URL', 'TOKEN'].every((end) =>
+  Object.keys(process.env).some((k) => k.endsWith(`KV_REST_API_${end}`) || k.endsWith(`REDIS_REST_${end}`)));
+if (!hasRedis) process.env.NOGGIN_MEMORY = '1';
 
 const { default: handler } = await import('../api/room.js');
 
@@ -63,5 +66,8 @@ createServer(async (req, res) => {
       if (n.family === 'IPv4' && !n.internal) console.log(`  phones (Wi-Fi): http://${n.address}:${PORT}`);
     }
   }
+  console.log(hasRedis
+    ? 'Rooms are stored in your Redis database.'
+    : 'Rooms are kept in memory: no setup needed, and they\'re gone when this stops.');
   console.log('Press Ctrl+C to stop.');
 });
