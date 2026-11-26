@@ -7,6 +7,11 @@
   <title>Noggin</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤔</text></svg>">
   <meta name="build" content="dev">
+  <script>
+    // GitHub Pages still publishes this repo, but only the files: the game server
+    // is on Vercel, so rooms can't work there. Send those visitors to the real one.
+    if (location.hostname.endsWith('.github.io')) location.replace('https://noggin-omega.vercel.app/' + location.search);
+  </script>
   <link rel="stylesheet" href="style.css?v=dev">
 </head>
 <body>

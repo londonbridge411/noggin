@@ -12,6 +12,7 @@
 
 import { Room, newCode } from '../lib/game.js';
 import { BUILD } from '../lib/build.js';
+import { memoryStore } from '../lib/memory.js';
 
 // Vercel's Upstash integration names these KV_REST_API_URL / KV_REST_API_TOKEN, or
 // UPSTASH_REDIS_REST_URL / _TOKEN, sometimes with a custom prefix (STORAGE_KV_...).
@@ -66,10 +67,21 @@ local sig = table.concat(on, ',')
 if ver == ARGV[3] and sig == ARGV[4] then return {'same'} end
 return {'room', ver, sig, redis.call('GET', KEYS[2])}`;
 
-const save = (code, expected, room) => redis('EVAL', SAVE, 2, ...keys(code).slice(0, 2), expected, JSON.stringify(room), TTL);
+const upstash = {
+  save: (code, expected, json) => redis('EVAL', SAVE, 2, ...keys(code).slice(0, 2), expected, json, TTL),
+  poll: (code, id, v, sig) => redis('EVAL', POLL, 3, ...keys(code), id, Date.now(), v, sig, TTL, ONLINE_WINDOW),
+  load: (code) => redis('MGET', ...keys(code).slice(0, 2)),
+  drop: (code) => redis('DEL', ...keys(code)),
+};
+
+// Redis when its keys are set. Without them, `npm run dev` keeps rooms in memory
+// (lib/memory.js); on Vercel there's no fallback and the handler says what's missing.
+const db = REDIS_URL && REDIS_TOKEN ? upstash : process.env.NOGGIN_MEMORY ? memoryStore(TTL, ONLINE_WINDOW) : null;
+
+const save = (code, expected, room) => db.save(code, expected, JSON.stringify(room));
 
 async function poll(code, id, key, v, sig) {
-  const [kind, ver, onlineSig, json] = await redis('EVAL', POLL, 3, ...keys(code), id, Date.now(), String(v ?? ''), String(sig ?? ''), TTL, ONLINE_WINDOW);
+  const [kind, ver, onlineSig, json] = await db.poll(code, id, String(v ?? ''), String(sig ?? ''));
   if (kind === 'gone') return { gone: true };
   if (kind === 'same') return { same: true };
   const room = new Room(code, JSON.parse(json));
@@ -82,13 +94,13 @@ async function poll(code, id, key, v, sig) {
 // fn(room) returns the result to send back, or { gone: true }.
 async function mutate(code, fn) {
   for (let tries = 0; tries < 10; tries++) {
-    const [ver, json] = await redis('MGET', ...keys(code).slice(0, 2));
+    const [ver, json] = await db.load(code);
     if (!ver || !json) return { gone: true };
     const room = new Room(code, JSON.parse(json));
     const result = fn(room);
     if (result.gone) return result;
     if (!room.players.length) {
-      await redis('DEL', ...keys(code));
+      await db.drop(code);
       return { gone: true };
     }
     const after = JSON.stringify(room);
@@ -150,7 +162,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Noggin-Build', BUILD); // phones on an older build reload (see app.js)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST.' });
-  if (!REDIS_URL || !REDIS_TOKEN) {
+  if (!db) {
     // Variable names only (never values), to help spot a naming mismatch.
     const seen = Object.keys(process.env).filter((k) => /KV|REDIS|UPSTASH/.test(k));
     return res.status(500).json({

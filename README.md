@@ -51,9 +51,11 @@ The function reads `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, or t
 
 ## Running it on your computer
 
-Run `npm run dev` and open http://localhost:3000. Phones on the same Wi-Fi can join using the network address it prints. It uses the Redis keys in `.env.local` (`npx vercel env pull .env.local` fetches them). Press Ctrl+C to stop it.
+Run `npm run dev` and open http://localhost:3000. Phones on the same Wi-Fi can join using the network address it prints. Press Ctrl+C to stop it.
 
-Opening `index.html` directly, or with a plain static server, shows the page but has no game server behind it, so rooms won't work.
+It needs no setup: rooms are kept in memory and are gone when you stop it. To use the real database instead, put its keys in `.env.local` (`npx vercel env pull .env.local` fetches them).
+
+Opening `index.html` directly, or with a plain static server, shows the page but has no game server behind it, so rooms won't work. That includes GitHub Pages: if Pages is still switched on for this repo, its copy of the page sends visitors on to the Vercel address.
 
 ## Files
 
@@ -61,4 +63,5 @@ Opening `index.html` directly, or with a plain static server, shows the page but
 - `app.js`: screens, plus talking to the server.
 - `api/room.js`: the server endpoint. Creates and joins rooms, applies actions, answers polls.
 - `lib/game.js`: game rules (rooms, turns, scoring). Runs on the server only.
+- `lib/memory.js`: in-memory rooms for `npm run dev` when there's no database.
 - `decks.js`: built-in decks, used by both the server and the lobby screen. Add your own as `{ text }` or `{ text, img }` cards.

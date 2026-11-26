@@ -100,6 +100,10 @@ async function call(op, body) {
   } catch {
     throw new Error('Couldn\'t reach the server. Check your internet connection.');
   }
+  // A plain file host answers 404 or 405 here: the page is up but nothing runs the game.
+  if (res.status === 404 || res.status === 405) {
+    throw new Error('There\'s no game server at this address, so rooms won\'t work here.');
+  }
   noteBuild(res.headers.get('X-Noggin-Build'));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Something went wrong on the server. Try again.');
